@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import joblib
+import xgboost  # Ensure xgboost is imported so that pickled XGB models can be unpickled.
 from PIL import Image
 from streamlit_option_menu import option_menu
 import os
