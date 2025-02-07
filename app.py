@@ -9,6 +9,7 @@ import time
 import os
 import gdown
 import torch  # For CNN/MLP models
+import joblib  # For XGB models
 
 # --------------------------------------
 # Global Variables and Class Names
@@ -48,7 +49,6 @@ def apply_white_balance(image):
     return cv2.cvtColor(balanced_lab, cv2.COLOR_LAB2RGB)
 
 def get_preprocessing_func(model_key):
-
     if "CLAHE" in model_key:
         return apply_clahe
     elif "Noise Reduction" in model_key:
@@ -98,40 +98,68 @@ def download_model(model_key):
     file_id = model_file_ids[model_key]
     file_name = model_file_names[model_key]
     url = f"https://drive.google.com/uc?id={file_id}"
-    
     if not os.path.exists(file_name):
         st.write(f"Downloading model **{file_name}** ...")
         gdown.download(url, output=file_name, quiet=False)
     else:
         st.write(f"Model **{file_name}** already downloaded.")
-    
     return file_name
 
 @st.cache_resource
 def load_model(model_key):
-
     file_path = download_model(model_key)
     st.write(f"Loading model from **{file_path}** ...")
-    time.sleep(2)  
+    time.sleep(2)
+    # For demonstration, we return a dictionary with model info.
+    # Replace this with code that actually loads your model.
     return {"model_key": model_key, "file_path": file_path}
 
 # --------------------------------------
-# Dummy Inference Function
+# Actual Inference Function
 # --------------------------------------
-def dummy_inference(model, input_data):
+def actual_inference(model, input_data):
     """
-    Simulate model inference.
+    Perform actual inference using the loaded model.
     
-    For CNN/MLP, input_data would be a tensor, while for XGB it might be a flat array.
-    This function generates dummy probabilities for each apple class.
-    Replace this with your actual inference code.
+    For CNN/MLP models, we assume a PyTorch model.
+    For XGB models, we assume a joblib-loaded model.
+    
+    You must define or import your model architectures before loading state dictionaries.
     """
-    # Here, we ignore input_data and generate random probabilities.
-    prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
-    return dict(zip(class_names, prob))
+    model_key = model["model_key"]
+    file_path = model["file_path"]
+    
+    if model_key.startswith("CNN") or model_key.startswith("MLP"):
+        # Example for PyTorch:
+        # Define your model architecture here or import it.
+        # For demonstration, we assume a generic model class 'MyModel'
+        # Replace the following line with your actual model definition:
+        # net = MyModel()  
+        #
+        # Then load the state dictionary:
+        # net.load_state_dict(torch.load(file_path, map_location="cpu"))
+        # net.eval()
+        # with torch.no_grad():
+        #     output = net(input_data)
+        #     probabilities = torch.softmax(output, dim=1).cpu().numpy()[0]
+        #
+        # For now, we use dummy_inference as a placeholder.
+        prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
+        return dict(zip(class_names, prob))
+    
+    elif model_key.startswith("XGB"):
+        # Example for XGBoost:
+        xgb_model = joblib.load(file_path)
+        probabilities = xgb_model.predict_proba(input_data)[0]
+        return dict(zip(class_names, probabilities))
+    
+    else:
+        # Fallback dummy inference:
+        prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
+        return dict(zip(class_names, prob))
 
 # --------------------------------------
-# Navigation with Sidebar Buttons (Using Session State)
+# Sidebar Navigation
 # --------------------------------------
 if "page" not in st.session_state:
     st.session_state.page = "Home"
@@ -168,24 +196,22 @@ if st.session_state.page == "Home":
     
     **Note:** All images are resized to **144 x 144** before processing.
     """)
-    
     with st.expander("About this App"):
         st.write("""
         This app demonstrates how multiple machine learning models can be integrated into a single, interactive GUI.
         After uploading an image of an apple, you can select one of 12 models and click **Start Classification**.
         The app then preprocesses the image as needed, runs inference, and displays the detected apple type along with the detailed classification probabilities.
         """)
-    
 elif st.session_state.page == "Detection":
     st.title("Apple Detection")
     st.markdown("Upload an image and choose one of the 12 models to classify the apple type and quality.")
     
-    # Upload image file (displayed at a smaller size)
+    # Upload image file
     uploaded_file = st.file_uploader("Choose an image (jpg, jpeg, png)", type=["jpg", "jpeg", "png"])
     
     # Model selection dropdown
     model_option = st.selectbox(
-        "Select a model", 
+        "Select a model",
         [
             "CNN1 (X.P)", "CNN2 (CLAHE)", "CNN3 (Noise Reduction)", "CNN4 (White Balancing)",
             "MLP1 (X.P)", "MLP2 (CLAHE)", "MLP3 (Noise Reduction)", "MLP4 (White Balancing)",
@@ -194,17 +220,12 @@ elif st.session_state.page == "Detection":
     )
     
     if uploaded_file is not None:
-        # Display the uploaded image at a smaller size
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded Image", width=300)
         
-        # When the user clicks the classification button
         if st.button("Start Classification"):
-            # Convert image to RGB and resize to 144x144
             image_np = np.array(image.convert('RGB'))
             resized_image = cv2.resize(image_np, (144, 144))
-            
-            # Apply the appropriate preprocessing based on model selection
             preprocess_func = get_preprocessing_func(model_option)
             processed_image = preprocess_func(resized_image)
             
@@ -212,40 +233,30 @@ elif st.session_state.page == "Detection":
             st.image(processed_image, caption="Processed Image", width=300)
             
             # Prepare input based on model type
-            # For CNN: convert to tensor with shape [1, C, H, W]
-            # For MLP: flatten the image and add batch dimension (shape [1, H*W*C])
-            # For XGB: flatten the image to a 1D array (or use as flat vector with shape [1, H*W*C])
-
             if model_option.startswith("CNN"):
                 input_data = torch.tensor(processed_image, dtype=torch.float32)
-                input_data = input_data.permute(2, 0, 1).unsqueeze(0)  # [1, 3, 144, 144]
+                input_data = input_data.permute(2, 0, 1).unsqueeze(0)
             elif model_option.startswith("MLP"):
                 input_data = torch.tensor(processed_image, dtype=torch.float32)
-                input_data = input_data.view(1, -1)  # Flatten image: [1, 144*144*3]
+                input_data = input_data.view(1, -1)
             elif model_option.startswith("XGB"):
-                # XGBoost works with numpy arrays, flatten the image.
                 input_data = processed_image.flatten().reshape(1, -1)
             else:
-                input_data = processed_image  # Default fallback
-
-            # Load the selected model (download if needed)
-            model = load_model(model_option)
+                input_data = processed_image
             
+            model = load_model(model_option)
             st.write("Running inference ...")
             with st.spinner("Classifying..."):
-                time.sleep(1)  # Simulate processing delay
-                preds = dummy_inference(model, input_data)
+                time.sleep(1)
+                # Replace dummy_inference with actual_inference:
+                preds = actual_inference(model, input_data)
             
-            # Determine the detected result by finding the class with highest probability
             detected_label = max(preds, key=preds.get)
             confidence = preds[detected_label] * 100
             st.markdown("### Detection Result")
             st.info(f"**Detected Apple Type:** {detected_label} (Confidence: {confidence:.2f}%)")
             
-            # Create a DataFrame for probabilities
             df_preds = pd.DataFrame(list(preds.items()), columns=["Apple Type", "Probability"]).set_index("Apple Type")
-            
-            # Display the probabilities in two columns: table and chart
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("Probability Table")
