@@ -18,16 +18,38 @@ class_names = ['barnae_apple', 'crimson_snow_apples', 'fuji_apple', 'gala_apple'
                'green_apple', 'pink_lady_apple', 'red_delicious_apple', 'rotten_Apple']
 
 # --------------------------------------
+# Example Model Architecture (Replace with your actual model)
+# --------------------------------------
+import torch.nn as nn
+class MyModel(nn.Module):
+    def __init__(self, num_classes=len(class_names)):
+        super(MyModel, self).__init__()
+        # This is just a placeholder architecture.
+        self.conv = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(16 * 72 * 72, 128),
+            nn.ReLU(),
+            nn.Linear(128, num_classes)
+        )
+    
+    def forward(self, x):
+        x = self.conv(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+# --------------------------------------
 # Preprocessing Functions
 # --------------------------------------
 def apply_clahe(image):
-    # Convert from RGB to LAB
     lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
-    # Create CLAHE object (parameters can be tuned)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     cl = clahe.apply(l)
-    # Merge channels and convert back to RGB
     merged = cv2.merge((cl, a, b))
     return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
 
@@ -39,10 +61,8 @@ def apply_white_balance(image):
     l, a, b = cv2.split(lab)
     avg_a = np.mean(a)
     avg_b = np.mean(b)
-    # Adjust the a and b channels by shifting towards neutral (128)
     a = a - (avg_a - 128)
     b = b - (avg_b - 128)
-    # Clip the values to [0, 255] and convert to uint8
     a = np.clip(a, 0, 255).astype(np.uint8)
     b = np.clip(b, 0, 255).astype(np.uint8)
     balanced_lab = cv2.merge((l, a, b))
@@ -56,7 +76,7 @@ def get_preprocessing_func(model_key):
     elif "White Balancing" in model_key:
         return apply_white_balance
     else:
-        return lambda x: x  # No preprocessing
+        return lambda x: x
 
 # --------------------------------------
 # Model File IDs and File Names
@@ -110,8 +130,7 @@ def load_model(model_key):
     file_path = download_model(model_key)
     st.write(f"Loading model from **{file_path}** ...")
     time.sleep(2)
-    # For demonstration, return a dictionary with model info.
-    # Replace the code below with your actual model-loading logic.
+    # Replace this placeholder with your actual model-loading code.
     return {"model_key": model_key, "file_path": file_path}
 
 # --------------------------------------
@@ -129,29 +148,27 @@ def actual_inference(model, input_data):
     file_path = model["file_path"]
     
     if model_key.startswith("CNN") or model_key.startswith("MLP"):
-        # Example placeholder for PyTorch models:
-        # Define and instantiate your model architecture here.
-        # For instance:
+        # Replace with your actual PyTorch model.
+        # For example, if you have a model class MyModel:
         # from my_model_definitions import MyModel
-        # net = MyModel()
+        # net = MyModel(num_classes=len(class_names))
         # net.load_state_dict(torch.load(file_path, map_location="cpu"))
         # net.eval()
         # with torch.no_grad():
         #     output = net(input_data)
         #     probabilities = torch.softmax(output, dim=1).cpu().numpy()[0]
         #
-        # For now, we generate random probabilities as a placeholder.
+        # For demonstration, we'll use random probabilities.
         prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
         return dict(zip(class_names, prob))
     
     elif model_key.startswith("XGB"):
-        # For XGB models, load using joblib and use predict_proba
+        # For XGBoost models, load using joblib and run predict_proba.
         xgb_model = joblib.load(file_path)
         probabilities = xgb_model.predict_proba(input_data)[0]
         return dict(zip(class_names, probabilities))
     
     else:
-        # Fallback: return random probabilities
         prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
         return dict(zip(class_names, prob))
 
@@ -248,7 +265,7 @@ elif st.session_state.page == "Detection":
             model = load_model(model_option)
             st.write("Running inference ...")
             with st.spinner("Classifying..."):
-                time.sleep(1)  # Simulate processing delay
+                time.sleep(1)
                 preds = actual_inference(model, input_data)
             
             detected_label = max(preds, key=preds.get)
