@@ -9,6 +9,7 @@ import time
 import os
 import gdown
 import torch  # For CNN/MLP models
+import torch.nn as nn
 import joblib  # For XGB models
 
 # --------------------------------------
@@ -20,11 +21,11 @@ class_names = ['barnae_apple', 'crimson_snow_apples', 'fuji_apple', 'gala_apple'
 # --------------------------------------
 # Example Model Architecture (Replace with your actual model)
 # --------------------------------------
-import torch.nn as nn
 class MyModel(nn.Module):
     def __init__(self, num_classes=len(class_names)):
         super(MyModel, self).__init__()
-        # This is just a placeholder architecture.
+        # This is a placeholder architecture.
+        # Replace with your actual model definition.
         self.conv = nn.Sequential(
             nn.Conv2d(3, 16, kernel_size=3, padding=1),
             nn.ReLU(),
@@ -76,7 +77,7 @@ def get_preprocessing_func(model_key):
     elif "White Balancing" in model_key:
         return apply_white_balance
     else:
-        return lambda x: x
+        return lambda x: x  # No preprocessing
 
 # --------------------------------------
 # Model File IDs and File Names
@@ -130,7 +131,8 @@ def load_model(model_key):
     file_path = download_model(model_key)
     st.write(f"Loading model from **{file_path}** ...")
     time.sleep(2)
-    # Replace this placeholder with your actual model-loading code.
+    # For demonstration, return a dictionary with model info.
+    # Replace this with your actual model-loading code.
     return {"model_key": model_key, "file_path": file_path}
 
 # --------------------------------------
@@ -148,27 +150,26 @@ def actual_inference(model, input_data):
     file_path = model["file_path"]
     
     if model_key.startswith("CNN") or model_key.startswith("MLP"):
-        # Replace with your actual PyTorch model.
-        # For example, if you have a model class MyModel:
-        # from my_model_definitions import MyModel
-        # net = MyModel(num_classes=len(class_names))
-        # net.load_state_dict(torch.load(file_path, map_location="cpu"))
-        # net.eval()
-        # with torch.no_grad():
-        #     output = net(input_data)
-        #     probabilities = torch.softmax(output, dim=1).cpu().numpy()[0]
-        #
-        # For demonstration, we'll use random probabilities.
-        prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
-        return dict(zip(class_names, prob))
+        # Instantiate your PyTorch model.
+        net = MyModel(num_classes=len(class_names))
+        # Load the saved state dictionary (ensure the file matches the architecture)
+        net.load_state_dict(torch.load(file_path, map_location="cpu"))
+        net.eval()
+        # If your model was trained on normalized images, normalize here:
+        input_data = input_data / 255.0
+        with torch.no_grad():
+            output = net(input_data)
+            probabilities = torch.softmax(output, dim=1).cpu().numpy()[0]
+        return dict(zip(class_names, probabilities))
     
     elif model_key.startswith("XGB"):
-        # For XGBoost models, load using joblib and run predict_proba.
+        # Load the XGBoost model using joblib and predict probabilities.
         xgb_model = joblib.load(file_path)
         probabilities = xgb_model.predict_proba(input_data)[0]
         return dict(zip(class_names, probabilities))
     
     else:
+        # Fallback (should not occur if all model types are handled)
         prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
         return dict(zip(class_names, prob))
 
