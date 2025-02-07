@@ -110,8 +110,8 @@ def load_model(model_key):
     file_path = download_model(model_key)
     st.write(f"Loading model from **{file_path}** ...")
     time.sleep(2)
-    # For demonstration, we return a dictionary with model info.
-    # Replace this with code that actually loads your model.
+    # For demonstration, return a dictionary with model info.
+    # Replace the code below with your actual model-loading logic.
     return {"model_key": model_key, "file_path": file_path}
 
 # --------------------------------------
@@ -120,41 +120,38 @@ def load_model(model_key):
 def actual_inference(model, input_data):
     """
     Perform actual inference using the loaded model.
-    
     For CNN/MLP models, we assume a PyTorch model.
     For XGB models, we assume a joblib-loaded model.
     
-    You must define or import your model architectures before loading state dictionaries.
+    Replace the placeholder code with your actual model architecture and inference logic.
     """
     model_key = model["model_key"]
     file_path = model["file_path"]
     
     if model_key.startswith("CNN") or model_key.startswith("MLP"):
-        # Example for PyTorch:
-        # Define your model architecture here or import it.
-        # For demonstration, we assume a generic model class 'MyModel'
-        # Replace the following line with your actual model definition:
-        # net = MyModel()  
-        #
-        # Then load the state dictionary:
+        # Example placeholder for PyTorch models:
+        # Define and instantiate your model architecture here.
+        # For instance:
+        # from my_model_definitions import MyModel
+        # net = MyModel()
         # net.load_state_dict(torch.load(file_path, map_location="cpu"))
         # net.eval()
         # with torch.no_grad():
         #     output = net(input_data)
         #     probabilities = torch.softmax(output, dim=1).cpu().numpy()[0]
         #
-        # For now, we use dummy_inference as a placeholder.
+        # For now, we generate random probabilities as a placeholder.
         prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
         return dict(zip(class_names, prob))
     
     elif model_key.startswith("XGB"):
-        # Example for XGBoost:
+        # For XGB models, load using joblib and use predict_proba
         xgb_model = joblib.load(file_path)
         probabilities = xgb_model.predict_proba(input_data)[0]
         return dict(zip(class_names, probabilities))
     
     else:
-        # Fallback dummy inference:
+        # Fallback: return random probabilities
         prob = np.random.dirichlet(np.ones(len(class_names)), size=1)[0]
         return dict(zip(class_names, prob))
 
@@ -224,8 +221,11 @@ elif st.session_state.page == "Detection":
         st.image(image, caption="Uploaded Image", width=300)
         
         if st.button("Start Classification"):
+            # Convert image to RGB and resize to 144x144
             image_np = np.array(image.convert('RGB'))
             resized_image = cv2.resize(image_np, (144, 144))
+            
+            # Apply the appropriate preprocessing based on model selection
             preprocess_func = get_preprocessing_func(model_option)
             processed_image = preprocess_func(resized_image)
             
@@ -235,20 +235,20 @@ elif st.session_state.page == "Detection":
             # Prepare input based on model type
             if model_option.startswith("CNN"):
                 input_data = torch.tensor(processed_image, dtype=torch.float32)
-                input_data = input_data.permute(2, 0, 1).unsqueeze(0)
+                input_data = input_data.permute(2, 0, 1).unsqueeze(0)  # [1, 3, 144, 144]
             elif model_option.startswith("MLP"):
                 input_data = torch.tensor(processed_image, dtype=torch.float32)
-                input_data = input_data.view(1, -1)
+                input_data = input_data.view(1, -1)  # Flatten image: [1, 144*144*3]
             elif model_option.startswith("XGB"):
                 input_data = processed_image.flatten().reshape(1, -1)
             else:
                 input_data = processed_image
             
+            # Load the selected model (download if needed)
             model = load_model(model_option)
             st.write("Running inference ...")
             with st.spinner("Classifying..."):
-                time.sleep(1)
-                # Replace dummy_inference with actual_inference:
+                time.sleep(1)  # Simulate processing delay
                 preds = actual_inference(model, input_data)
             
             detected_label = max(preds, key=preds.get)
