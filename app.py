@@ -6,6 +6,8 @@ import torch.nn as nn
 import joblib
 from PIL import Image
 from streamlit_option_menu import option_menu
+import os
+import gdown
 
 # ---------------------------
 # Page Configuration
@@ -103,8 +105,23 @@ class CNN(nn.Module):
         return x
 
 # ---------------------------
-# Model Files and Architecture Mapping
+# Model Files, IDs, and Architecture Mapping
 # ---------------------------
+model_file_ids = {
+    "CNN1 (X.P)": "1-4C217rhypyZjXoBcFLHITvYHWY_xHoE",
+    "CNN2 (CLAHE)": "1-2fEm_GDoQBKFZQEik-QKYJFBYOV1G9Y",
+    "CNN3 (Noise Reduction)": "1-2mliuqVwXO1TgSB74EeaXsSJnxPr0Hp",
+    "CNN4 (White Balancing)": "1-2C7HCBke5lzVRcGfLFf1KxqHBYNorQb",
+    "MLP1 (X.P)": "1--w_x_Pj-2-wA4-Oeo8d5kPb7k-c5aO4",
+    "MLP2 (CLAHE)": "1-QFHWsiCb4PBTFZM-j4tvQdiVLsjJODz",
+    "MLP3 (Noise Reduction)": "1-Y4kpV_9wsaI_dc2nSCHCi6QlYzqNqcc",
+    "MLP4 (White Balancing)": "1-kcHrwX36Q5lQQQcjtfAYYykJME9p2yz",
+    "XGB1 (X.P)": "1k8To7HkGtJNW1S-MTfSxWAtLxDNMvRrm",
+    "XGB2 (CLAHE)": "1l_66uTpTRhjv99he-fy8BTH8JOsE_LVW",
+    "XGB3 (Noise Reduction)": "1_8QQTCCTydQgMY4bkokw4zZXMCLRpa2y",
+    "XGB4 (White Balancing)": "1w6lMXabD-FWKz25Jbtq5lBKkWHC6rck5"
+}
+
 model_file_names = {
     "CNN1 (X.P)": "CNN1_XP_20.pth",
     "CNN2 (CLAHE)": "CNN2_CLAHE_13.pth",
@@ -120,6 +137,7 @@ model_file_names = {
     "XGB4 (White Balancing)": "xgb4_model_wb.joblib"
 }
 
+# Correct mapping: use MLP for the MLP models and CNN for the CNN models.
 model_architectures = {
     "CNN1 (X.P)": "CNN",
     "CNN2 (CLAHE)": "CNN",
@@ -136,6 +154,18 @@ model_architectures = {
 }
 
 # ---------------------------
+# Function to Download Model if Needed
+# ---------------------------
+def download_model(model_key):
+    model_path = model_file_names[model_key]
+    if not os.path.exists(model_path):
+        file_id = model_file_ids[model_key]
+        url = f"https://drive.google.com/uc?id={file_id}"
+        st.info(f"Downloading {model_key} from Google Drive...")
+        gdown.download(url, model_path, quiet=False)
+    return model_path
+
+# ---------------------------
 # Helper Functions for Loading and Prediction
 # ---------------------------
 def get_preprocessing_function(model_key):
@@ -147,6 +177,7 @@ def get_preprocessing_function(model_key):
     return no_preprocessing
 
 def load_torch_model(model_key):
+    download_model(model_key)  # Ensure file is available
     arch = model_architectures.get(model_key, "MLP")
     if arch == "CNN":
         model = CNN(num_classes=8)
@@ -161,6 +192,7 @@ def load_torch_model(model_key):
     return model
 
 def load_xgb_model(model_key):
+    download_model(model_key)  # Ensure file is available
     model_path = model_file_names[model_key]
     return joblib.load(model_path)
 
@@ -220,7 +252,7 @@ if selected == "Home":
             - red_delicious_apple  
             - rotten_Apple  
 
-            The models were trained using different preprocessing techniques. You can choose a model from the Classification page, upload an image, and view both the original and preprocessed images before seeing the predicted class.
+            The models were trained using different preprocessing techniques. Choose a model on the Classification page, upload an image, and view both the original and preprocessed images before seeing the predicted class.
             """
         )
 
