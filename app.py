@@ -10,7 +10,7 @@ from streamlit_option_menu import option_menu
 import os
 import gdown
 import io
-from rembg import remove  # Make sure to install with: pip install rembg
+from rembg import remove  # pip install rembg
 
 # ---------------------------
 # Page Configuration
@@ -20,6 +20,26 @@ st.set_page_config(
     page_icon="🍎",
     layout="wide"
 )
+
+# ---------------------------
+# Sidebar: Navigation and Settings
+# ---------------------------
+with st.sidebar:
+    st.title("Navigation")
+    selected = option_menu(
+        menu_title="Pages",
+        options=["Home", "Classification"],
+        icons=["house", "kanban"],
+        menu_icon="cast",
+        default_index=0,
+    )
+    st.markdown("---")
+    st.header("Display Settings")
+    img_size = st.slider("Select Image Display Size (px)", 200, 500, 300)
+    st.info("Adjust the display size of images.")
+
+    st.markdown("---")
+    st.info("To further customize the look of your app, check out [Streamlit Themes](https://docs.streamlit.io/library/advanced-features/theming) and update your configuration accordingly.")
 
 # ---------------------------
 # Global Variables and Class Names
@@ -92,8 +112,6 @@ class CNN(nn.Module):
         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
         self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        # For a 144x144 image with 4 poolings: 144 -> 72 -> 36 -> 18 -> 9
-        # Flattened size = 256 * 9 * 9 = 20736.
         self.fc1 = nn.Linear(256 * 9 * 9, 512)
         self.fc2 = nn.Linear(512, num_classes)
 
@@ -178,13 +196,14 @@ def get_preprocessing_function(model_key):
         return preprocessing_functions.get(preprocess_type, no_preprocessing)
     return no_preprocessing
 
+@st.cache_resource(show_spinner=False)
 def load_torch_model(model_key):
-    download_model(model_key)  # Ensure file is available
+    download_model(model_key)
     arch = model_architectures.get(model_key, "MLP")
     if arch == "CNN":
         model = CNN(num_classes=8)
     elif arch == "MLP":
-        input_size = 144 * 144 * 3  # For MLP, the image is flattened.
+        input_size = 144 * 144 * 3
         model = MLP(input_size, 8)
     else:
         raise ValueError("Unknown architecture for model key: " + model_key)
@@ -193,13 +212,13 @@ def load_torch_model(model_key):
     model.eval()
     return model
 
+@st.cache_resource(show_spinner=False)
 def load_xgb_model(model_key):
-    download_model(model_key)  # Ensure file is available
+    download_model(model_key)
     model_path = model_file_names[model_key]
     return joblib.load(model_path)
 
 def predict_image(model_key, image_np):
-    # Resize image to 144x144 for model input.
     image_resized = cv2.resize(image_np, (144, 144))
     preprocess_func = get_preprocessing_function(model_key)
     processed_image = preprocess_func(image_resized)
@@ -213,7 +232,7 @@ def predict_image(model_key, image_np):
         arch = model_architectures.get(model_key, "MLP")
         if arch == "MLP":
             image_tensor = torch.tensor(processed_image_norm, dtype=torch.float32).view(1, -1)
-        else:  # CNN
+        else:
             image_tensor = torch.tensor(processed_image_norm, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
         model = load_torch_model(model_key)
         with torch.no_grad():
@@ -222,13 +241,9 @@ def predict_image(model_key, image_np):
     return prediction, processed_image
 
 # ---------------------------
-# NEW: Functions for Background Removal
+# Functions for Background Removal
 # ---------------------------
 def remove_background_transparent(pil_img):
-    """
-    Removes the background of a PIL image using rembg,
-    returning an image with transparency (RGBA).
-    """
     buffer = io.BytesIO()
     pil_img.save(buffer, format="PNG")
     img_bytes = buffer.getvalue()
@@ -237,38 +252,32 @@ def remove_background_transparent(pil_img):
     return transparent_image
 
 def fill_transparency(image, background_color=(255,255,255)):
-    """
-    If the image has an alpha channel (transparency),
-    paste it onto a solid background for use in classification.
-    """
     if image.mode == 'RGBA':
         background = Image.new("RGB", image.size, background_color)
-        background.paste(image, mask=image.split()[3])  # use alpha channel as mask
+        background.paste(image, mask=image.split()[3])
         return background
     else:
         return image
 
 # ---------------------------
-# Streamlit App with Enhanced Navigation and Layout
+# Streamlit App: Home and Classification Pages
 # ---------------------------
-with st.sidebar:
-    selected = option_menu(
-        menu_title="Navigation",
-        options=["Home", "Classification"],
-        icons=["house", "kanban"],
-        menu_icon="cast",
-        default_index=0,
-    )
-    st.info("Select a page from the menu above.")
-
 if selected == "Home":
     st.title("Apple Quality & Type Classification")
-    st.header("Overview")
-    st.info(
-        "This application uses computer vision models (CNN, MLP, and XGBoost) along with various preprocessing techniques (CLAHE, noise reduction, white balancing) to classify apples into one of eight types. "
-        "Navigate to the Classification page to upload an image and see the result."
-    )
-    with st.expander("Learn More"):
+    
+    # Container with detailed instructions
+    with st.container():
+        st.header("Welcome!")
+        st.markdown("""
+        **How to Use This App:**
+        1. **Navigate:** Use the sidebar to switch between *Home* and *Classification*.
+        2. **Learn:** Read through the instructions below to understand how the app works.
+        3. **Upload:** On the Classification page, upload an image of an apple.
+        4. **Select a Model:** Choose from several pre-trained models that use different preprocessing techniques.
+        5. **Classify:** Click **Start Classify** to see the preprocessed image and predicted apple type.
+        """)
+    
+    with st.expander("Learn More About Apple Classes & Preprocessing"):
         st.write(
             """
             **Apple Classes:**
@@ -281,45 +290,60 @@ if selected == "Home":
             - red_delicious_apple  
             - rotten_Apple  
 
-            The models were trained using different preprocessing techniques. Choose a model on the Classification page, upload an image, and view both the original and preprocessed images before seeing the predicted class.
+            **Preprocessing Techniques:**
+            - **X.P:** No additional processing.
+            - **CLAHE:** Adaptive histogram equalization.
+            - **Noise Reduction:** Bilateral filtering.
+            - **White Balancing:** Color correction in LAB space.
             """
         )
 
 elif selected == "Classification":
     st.title("Apple Classification")
-    st.subheader("Upload an image and select a model for classification")
-    model_key = st.selectbox("Select Model", list(model_file_names.keys()))
-    uploaded_file = st.file_uploader("Upload an image (jpg, jpeg, or png)", type=["jpg", "jpeg", "png"])
     
-    if uploaded_file is not None:
-        # Open image in RGBA mode to preserve transparency.
-        image = Image.open(uploaded_file).convert("RGBA")
-        
-        # Resize images to 300x300 for display.
-        image_display = image.resize((300, 300))
-        apple_transparent = remove_background_transparent(image)
-        apple_transparent_display = apple_transparent.resize((300, 300))
-        
-        # For classification, fill transparency (to get an RGB image).
-        apple_for_classification = fill_transparency(apple_transparent)
-        
-        # Use two columns to align the images side by side.
+    # Container with usage instructions and model details side-by-side
+    with st.container():
         col1, col2 = st.columns(2)
         with col1:
-            st.image(image_display, caption="Uploaded Image (300x300)", width=300)
+            st.subheader("How to Classify:")
+            st.markdown("""
+            - **Step 1:** Upload your image in the *Image Upload & Preview* tab.
+            - **Step 2:** The app will display your original image and a version with the background removed.
+            - **Step 3:** Choose a model from the dropdown menu.
+            - **Step 4:** Click **Start Classify** to process the image and get a prediction.
+            """)
         with col2:
-            st.image(apple_transparent_display, caption="Transparent Background (300x300)", width=300)
-        
-        if st.button("Start Classify"):
-            # Convert the RGB (filled) image to numpy for processing.
+            st.subheader("Selected Model Details:")
+            model_key = st.selectbox("Select Model", list(model_file_names.keys()))
+            with st.expander("Model Details"):
+                arch = model_architectures.get(model_key, "N/A")
+                preprocess_func = get_preprocessing_function(model_key).__name__
+                st.markdown(f"**Architecture:** {arch}")
+                st.markdown(f"**Preprocessing Technique:** {preprocess_func}")
+    
+    # Tabs for image upload/preview and classification result.
+    tab1, tab2 = st.tabs(["Image Upload & Preview", "Classification Result"])
+    
+    with tab1:
+        uploaded_file = st.file_uploader("Upload an image (jpg, jpeg, or png)", type=["jpg", "jpeg", "png"])
+        if uploaded_file is not None:
+            image = Image.open(uploaded_file).convert("RGBA")
+            image_display = image.resize((img_size, img_size))
+            apple_transparent = remove_background_transparent(image)
+            apple_transparent_display = apple_transparent.resize((img_size, img_size))
+            col_img1, col_img2 = st.columns(2)
+            with col_img1:
+                st.image(image_display, caption="Uploaded Image", width=img_size)
+            with col_img2:
+                st.image(apple_transparent_display, caption="Image with Transparent Background", width=img_size)
+    
+    if uploaded_file is not None and st.button("Start Classify"):
+        with st.spinner("Classifying..."):
+            apple_for_classification = fill_transparency(apple_transparent)
             image_np = np.array(apple_for_classification)
-            with st.spinner("Classifying..."):
-                prediction_idx, processed_image = predict_image(model_key, image_np)
-            # Resize the preprocessed image to 300x300.
-            processed_display = cv2.resize(processed_image, (300, 300))
-            # Display the preprocessed image in the center.
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.image(processed_display, caption="Preprocessed Image (300x300)", channels="RGB", width=300)
+            prediction_idx, processed_image = predict_image(model_key, image_np)
+        processed_display = cv2.resize(processed_image, (img_size, img_size))
+        with tab2:
+            st.image(processed_display, caption="Preprocessed Image", width=img_size)
             st.header("Predicted Class: " + class_names[prediction_idx])
             st.success("Classification complete!")
