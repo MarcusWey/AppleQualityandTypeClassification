@@ -4,11 +4,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import joblib
-import xgboost  # Ensure xgboost is imported so that pickled XGB models can be unpickled.
+import xgboost 
 from PIL import Image
 from streamlit_option_menu import option_menu
 import os
 import gdown
+import io
+from rembg import remove  # Make sure to install with: pip install rembg
 
 # ---------------------------
 # Page Configuration
@@ -138,7 +140,6 @@ model_file_names = {
     "XGB4 (White Balancing)": "xgb4_model_wb.joblib"
 }
 
-# Correct mapping: use MLP for the MLP models and CNN for the CNN models.
 model_architectures = {
     "CNN1 (X.P)": "CNN",
     "CNN2 (CLAHE)": "CNN",
@@ -221,7 +222,34 @@ def predict_image(model_key, image_np):
     return prediction, processed_image
 
 # ---------------------------
-# Streamlit App with Enhanced Navigation and Centered Display
+# NEW: Functions for Background Removal
+# ---------------------------
+def remove_background_transparent(pil_img):
+    """
+    Removes the background of a PIL image using rembg,
+    returning an image with transparency (RGBA).
+    """
+    buffer = io.BytesIO()
+    pil_img.save(buffer, format="PNG")
+    img_bytes = buffer.getvalue()
+    output_bytes = remove(img_bytes)
+    transparent_image = Image.open(io.BytesIO(output_bytes))
+    return transparent_image
+
+def fill_transparency(image, background_color=(255,255,255)):
+    """
+    If the image has an alpha channel (transparency),
+    paste it onto a solid background for use in classification.
+    """
+    if image.mode == 'RGBA':
+        background = Image.new("RGB", image.size, background_color)
+        background.paste(image, mask=image.split()[3])  # use alpha channel as mask
+        return background
+    else:
+        return image
+
+# ---------------------------
+# Streamlit App with Enhanced Navigation and Layout
 # ---------------------------
 with st.sidebar:
     selected = option_menu(
@@ -264,18 +292,34 @@ elif selected == "Classification":
     uploaded_file = st.file_uploader("Upload an image (jpg, jpeg, or png)", type=["jpg", "jpeg", "png"])
     
     if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert("RGB")
-        image_np = np.array(image)
-        uploaded_image_resized = cv2.resize(image_np, (300, 300))
-        col1, col2, col3 = st.columns([1, 2, 1])
+        # Open image in RGBA mode to preserve transparency.
+        image = Image.open(uploaded_file).convert("RGBA")
+        
+        # Resize images to 300x300 for display.
+        image_display = image.resize((300, 300))
+        apple_transparent = remove_background_transparent(image)
+        apple_transparent_display = apple_transparent.resize((300, 300))
+        
+        # For classification, fill transparency (to get an RGB image).
+        apple_for_classification = fill_transparency(apple_transparent)
+        
+        # Use two columns to align the images side by side.
+        col1, col2 = st.columns(2)
+        with col1:
+            st.image(image_display, caption="Uploaded Image (300x300)", width=300)
         with col2:
-            st.image(uploaded_image_resized, caption="Uploaded Image (300x300)", channels="RGB")
+            st.image(apple_transparent_display, caption="Transparent Background (300x300)", width=300)
         
         if st.button("Start Classify"):
+            # Convert the RGB (filled) image to numpy for processing.
+            image_np = np.array(apple_for_classification)
             with st.spinner("Classifying..."):
                 prediction_idx, processed_image = predict_image(model_key, image_np)
+            # Resize the preprocessed image to 300x300.
             processed_display = cv2.resize(processed_image, (300, 300))
+            # Display the preprocessed image in the center.
+            col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                st.image(processed_display, caption="Preprocessed Image (300x300)", channels="RGB")
+                st.image(processed_display, caption="Preprocessed Image (300x300)", channels="RGB", width=300)
             st.header("Predicted Class: " + class_names[prediction_idx])
             st.success("Classification complete!")
