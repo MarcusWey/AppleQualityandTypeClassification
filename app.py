@@ -10,7 +10,7 @@ from streamlit_option_menu import option_menu
 import os
 import gdown
 import io
-from rembg import remove  # pip install rembg
+from rembg import remove
 
 # ---------------------------
 # Page Configuration
