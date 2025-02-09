@@ -8,3 +8,4 @@ torch==2.2.2
 joblib
 streamlit-option-menu
 xgboost 
+rembg
